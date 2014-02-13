@@ -1,8 +1,7 @@
+//кнопкой зажигаем 3 диода и выключаются автоматом через 2 секуныд
+
 #include <stm32f10x_rcc.h>
-void Delay(void){
-	volatile uint32_t i;
-	for (i=0; i != 0x80000; i++);
-}
+
 
 int main(void) {
 
