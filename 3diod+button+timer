@@ -1,0 +1,89 @@
+#include <stm32f10x_rcc.h>
+void Delay(void){
+	volatile uint32_t i;
+	for (i=0; i != 0x80000; i++);
+}
+
+int main(void) {
+
+RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM6, ENABLE);
+
+  /* Инициализируем базовый таймер: делитель 24000, период 500 мс.
+   * Другие параметры структуры TIM_TimeBaseInitTypeDef
+   * не имеют смысла для базовых таймеров.
+   */
+  TIM_TimeBaseInitTypeDef base_timer;
+  TIM_TimeBaseStructInit(&base_timer);
+  /* Делитель учитывается как TIM_Prescaler + 1, поэтому отнимаем 1 */
+  base_timer.TIM_Prescaler = 24000 - 1;
+  base_timer.TIM_Period = 500;
+  TIM_TimeBaseInit(TIM6, &base_timer);
+
+  /* Разрешаем прерывание по обновлению (в данном случае -
+   * по переполнению) счётчика таймера TIM6.
+   */
+  TIM_ITConfig(TIM6, TIM_IT_Update, ENABLE);
+
+
+
+  /* Разрешаем обработку прерывания по переполнению счётчика
+   * таймера TIM6. Так получилось, что это же прерывание
+   * отвечает и за опустошение ЦАП.
+   */
+  NVIC_EnableIRQ(TIM6_DAC_IRQn);
+
+
+   uint8_t temp=0;
+/*просто GPIOx_CRL отвечает за конфигурирование младшей половины порта (ножки с 0 по 7), а GPIOx_CRH старшей (ножки с 8 по 15)*/
+
+ //Включим тактирование порта С (со светодиодами) и порта А (с кнопкой)
+  RCC->APB2ENR |= (RCC_APB2Periph_GPIOC|RCC_APB2Periph_GPIOA|RCC_APB2Periph_GPIOB );
+  //Настроим ножки со светодиодами как выходы
+  GPIOC->CRH |=0x33;
+  GPIOC->CRH &= ~0xCC;
+  GPIOB->CRH |=0x300; //pb10
+  GPIOB->CRH &= ~0xC00;
+
+  //Настроим ногу PA0 как вход без подтяжки (подтягивающий резистор уже есть на плате)
+  GPIOA->CRL |= 0x04; //mode в 00
+  GPIOA->CRL &= ~0x11; //0xb;
+
+	// по кругу зажигаем 8, 9 и внешний на 10 ножке
+  while(1) { //Бесконечный цикл
+    if ((GPIOA->IDR & 0x01)==0x01) {
+	
+		// bs включаем, br выключаем
+		GPIOC->BSRR=(GPIO_BSRR_BS8);
+		GPIOC->BSRR=(GPIO_BSRR_BS9);
+		GPIOB->BSRR=(GPIO_BSRR_BS10);
+		  /* Включаем таймер */		
+  		TIM_Cmd(TIM6, ENABLE);
+		
+				
+	}
+}
+}
+
+void TIM6_DAC_IRQHandler()
+{
+  /* Так как этот обработчик вызывается и для ЦАП, нужно проверять,
+   * произошло ли прерывание по переполнению счётчика таймера TIM6.
+   */
+  if (TIM_GetITStatus(TIM6, TIM_IT_Update) != RESET)
+  {
+    /* Очищаем бит обрабатываемого прерывания */
+    TIM_ClearITPendingBit(TIM6, TIM_IT_Update);
+    /* Инвертируем состояние светодиодов */
+    GPIOC->BSRR=(GPIO_BSRR_BR8);
+		GPIOC->BSRR=(GPIO_BSRR_BR9);
+		GPIOB->BSRR=(GPIO_BSRR_BR10);
+  }
+}
+
+
+
+
+
+
+
+
