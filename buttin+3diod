@@ -24,6 +24,7 @@ int main(void) {
   while(1) { //Бесконечный цикл
     if ((GPIOA->IDR & 0x01)==0x01) {
 	if (temp==0){
+		// bs включаем, br выключаем
 		GPIOB->BSRR=(GPIO_BSRR_BR10);
 		GPIOC->BSRR=(GPIO_BSRR_BS8);
 		Delay();
