@@ -1,3 +1,6 @@
+
+//каждое нажатие кнопки зажигает следующий диод, рабочий тушит
+
 #include <stm32f10x_rcc.h>
 void Delay(void){
 	volatile uint32_t i;
