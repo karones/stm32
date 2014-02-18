@@ -1,7 +1,7 @@
 /*мигаем диодами от данных acp*/
 
 #include<stm32f10x_rcc.h>
-//#include<stm32f10x_gpio.h>
+#include<stm32f10x_gpio.h>
 #include "stm32f10x.h"
 
 
@@ -22,7 +22,7 @@ int main(void)
   GPIOC->CRH &=~0xc;
   GPIOA->CRL|=0x3000;
   GPIOA->CRL&=~0xc000;
-  
+
   //Порт A настраивать смысла нет, все его ноги по умолчанию входы что нам и нужно
   RCC_APB2PeriphClockCmd(RCC_APB2ENR_ADC1EN, ENABLE); //Включаем тактирование АЦП
   ADC1->CR2 |= ADC_CR2_CAL; //Запуск калибровки АЦП
