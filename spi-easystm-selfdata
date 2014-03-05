@@ -1,0 +1,57 @@
+//spi pa 5-6-7
+//замкнуть 6-7 получим само прием
+
+
+
+#include "stm32f10x.h"
+#include "stm32f10x_gpio.h"
+#include "stm32f10x_rcc.h"
+#include "stm32f10x_spi.h"
+ 
+
+
+
+int main(void) {
+
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_SPI1, ENABLE);
+  RCC->APB2ENR |= (RCC_APB2Periph_GPIOC|RCC_APB2Periph_GPIOA|);
+  //Настроим ножки со светодиодами как выходы
+  GPIOC->CRH |=0x33;
+  GPIOC->CRH &= ~0xCC;
+ GPIOA->CRL |= 0x04; //mode в 00
+  GPIOA->CRL &= ~0x11; //0xb;
+
+    //Заполняем структуру с параметрами SPI модуля
+  SPI_InitStructure.SPI_Direction = SPI_Direction_2Lines_FullDuplex; //полный дуплекс
+  SPI_InitStructure.SPI_DataSize = SPI_DataSize_8b; // передаем по 8 бит
+  SPI_InitStructure.SPI_CPOL = SPI_CPOL_Low; // Полярность и
+  SPI_InitStructure.SPI_CPHA = SPI_CPHA_1Edge; // фаза тактового сигнала
+  SPI_InitStructure.SPI_NSS = SPI_NSS_Hard; // Управлять состоянием сигнала NSS аппаратно
+  SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_32; // Предделитель SCK
+  SPI_InitStructure.SPI_FirstBit = SPI_FirstBit_MSB; // Первым отправляется старший бит
+  SPI_InitStructure.SPI_Mode = SPI_Mode_Slave; // Режим - слейв
+  SPI_Init(SPI1, &SPI_InitStructure); //Настраиваем SPI1
+  SPI_I2S_ITConfig(SPI1,SPI_I2S_IT_RXNE,ENABLE); //Включаем прерывание по приему байта
+  SPI_Cmd(SPI1, ENABLE); // Включаем модуль SPI1....
+  NVIC_EnableIRQ(SPI1_IRQn); //Разрешаем прерывания от SPI1	
+
+SPI_NSSInternalSoftwareConfig(SPI1, SPI_NSSInternalSoft_Set);
+ 
+  uint16_t data = 0;
+  while(1) {
+    SPI_I2S_SendData(SPI1, 0x93); //Передаем байт 0x93 через SPI1
+    while(SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY) == SET) //Передатчик занят?
+      ; // значит ничего не делаем
+ 
+    if (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE) == SET) { //Если данные пришли
+      data = SPI_I2S_ReceiveData(SPI1); //Читаем принятые данные
+        if (data==0x93) { //Пришли правильные данные ?
+            GPIO_Write(LED_PORT,LED_GREEN);
+          } else {
+            GPIO_Write(LED_PORT,LED_RED);
+        }
+      }
+   }
+}
+
+
