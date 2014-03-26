@@ -1,0 +1,54 @@
+#include <stm32f10x_rcc.h>
+#include<stm32f10x_gpio.h>
+#include "stm32f10x.h"
+
+int main(void)
+{
+   GPIO_InitTypeDef PORT;
+   RCC_APB2PeriphClockCmd((RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOA) , ENABLE);
+    // сервы висят на па1 и па2. используем встроенную кнопку и диод на пс 8, па0 кнопка
+    //GPIOA->CRL |=
+    //diod
+    GPIOA->CRH |=0x3;
+    GPIOA->CRH &=0xC;
+    //button
+    GPIOA->CRL |= 0x04; //mode в 00
+    GPIOA->CRL &= ~0x11; //0xb;
+    //Прерывания - это альтернативная функция порта
+  //поэтому надо установить бит Alternate function I/O clock enable
+  //в регистре RCC_APB2ENR
+  RCC_APB2PeriphClockCmd(RCC_APB2ENR_AFIOEN , ENABLE);
+
+ //Наша задача получить в регистре EXTICR[0] такую комбинацию бит
+  // 0000 0000 0001 0000
+  // по умолчанию там ноли, поэтому установим только 1 бит
+  AFIO->EXTICR[0]|=AFIO_EXTICR1_EXTI1_PB;
+  //Прерывания от нулевой и первой ноги разрешены
+  EXTI->IMR|=(EXTI_IMR_MR0 | EXTI_IMR_MR1);
+  //Прерывания на обоих ногах по нарастающему фронту
+  EXTI->RTSR|=(EXTI_RTSR_TR0 | EXTI_RTSR_TR1);
+  //Разрешаем оба прерывания
+  uint32_t func;
+  func=0;
+  NVIC_EnableIRQ (EXTI0_IRQn(func));
+//  NVIC_EnableIRQ (EXTI1_IRQn);
+
+  while(1)
+  {
+     //Программа ничего не делает в пустом цикле
+  }
+}
+
+
+// Обработчик прерывания EXTI0
+void EXTI0_IRQHandler(void)
+{
+  if (func==0){
+  GPIOA->BSRR=(GPIO_BSRR_BS3); //Инвертируем состояние светодиода
+  func=1;
+  }else{
+  GPIOC->BSRR=(GPIO_BSRR_BR8);
+  func=0;
+  }
+  EXTI->PR|=0x01; //Очищаем флаг
+}
