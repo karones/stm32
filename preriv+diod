@@ -2,6 +2,8 @@
 #include<stm32f10x_gpio.h>
 #include "stm32f10x.h"
 
+int func;
+func=0;
 int main(void)
 {
    GPIO_InitTypeDef PORT;
@@ -33,7 +35,7 @@ int main(void)
   uint32_t func;
     func=0;
   NVIC_EnableIRQ (EXTI0_IRQn(func));
-//  NVIC_EnableIRQ (EXTI1_IRQn);
+// NVIC_EnableIRQ (EXTI1_IRQn);
 
   while(1)
   {
@@ -49,7 +51,7 @@ void EXTI0_IRQHandler(uint32_t func)
   GPIOC->BSRR=(GPIO_BSRR_BS9); //Инвертируем состояние светодиода
   func=1;
   }else{
-  GPIOC->BSRR=(GPIO_BSRR_BR8);
+  GPIOC->BSRR=(GPIO_BSRR_BR9);
   func=0;
   }
   EXTI->PR|=0x01; //Очищаем флаг
