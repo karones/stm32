@@ -34,7 +34,7 @@ int main(void)
   //Разрешаем оба прерывания
   uint32_t func;
     func=0;
-  NVIC_EnableIRQ (EXTI0_IRQn(func));
+  NVIC_EnableIRQ (EXTI0_IRQn);
 // NVIC_EnableIRQ (EXTI1_IRQn);
 
   while(1)
@@ -45,7 +45,7 @@ int main(void)
 
 
 // Обработчик прерывания EXTI0
-void EXTI0_IRQHandler(uint32_t func)
+void EXTI0_IRQHandler(void)
 {
   if (func==0){
   GPIOC->BSRR=(GPIO_BSRR_BS9); //Инвертируем состояние светодиода
@@ -56,7 +56,3 @@ void EXTI0_IRQHandler(uint32_t func)
   }
   EXTI->PR|=0x01; //Очищаем флаг
 }
-
-
-[cc] C:\CooCox\CoIDE\workspace\serv\main.c:35:29: error: called object '6' is not a function
-
