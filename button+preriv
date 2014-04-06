@@ -2,6 +2,12 @@
 #include<stm32f10x_gpio.h>
 #include "stm32f10x.h"
 
+int func;
+func=0;
+void Delay(void){
+	volatile uint32_t i;
+	for (i=0; i != 0x80000; i++);
+}
 int main(void)
 {
    GPIO_InitTypeDef PORT;
@@ -9,6 +15,8 @@ int main(void)
     // сервы висят на па1 и па2. используем встроенную кнопку и диод на пс 8, па0 кнопка
     //GPIOA->CRL |=
     //diod
+   GPIOC->CRH |=0x33;
+     GPIOC->CRH &= ~0xCC;
     GPIOA->CRH |=0x3;
     GPIOA->CRH &=0xC;
     //button
@@ -29,9 +37,9 @@ int main(void)
   EXTI->RTSR|=(EXTI_RTSR_TR0 | EXTI_RTSR_TR1);
   //Разрешаем оба прерывания
   uint32_t func;
-  func=0;
-  NVIC_EnableIRQ (EXTI0_IRQn(func));
-//  NVIC_EnableIRQ (EXTI1_IRQn);
+    func=0;
+  NVIC_EnableIRQ (EXTI0_IRQn);
+// NVIC_EnableIRQ (EXTI1_IRQn);
 
   while(1)
   {
@@ -44,11 +52,13 @@ int main(void)
 void EXTI0_IRQHandler(void)
 {
   if (func==0){
-  GPIOA->BSRR=(GPIO_BSRR_BS3); //Инвертируем состояние светодиода
+  GPIOC->BSRR=(GPIO_BSRR_BS9); //Инвертируем состояние светодиода
   func=1;
+  Delay();
   }else{
-  GPIOC->BSRR=(GPIO_BSRR_BR8);
+  GPIOC->BSRR=(GPIO_BSRR_BR9);
   func=0;
+  Delay();
   }
   EXTI->PR|=0x01; //Очищаем флаг
 }
