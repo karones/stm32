@@ -1,0 +1,55 @@
+#include <stm32f4xx_rcc.h>
+#include<stm32f4xx_gpio.h>
+#include "stm32f4xx.h"
+//#include <stm32f429i_discovery_l3gd20.h>
+#include "stm32f4xx.h"
+#include <stdio.h>
+#include "main.h"
+#include "stm32f4xx_it.h"
+float Buffer[6];
+float Gyro[3];
+float X_BiasError, Y_BiasError, Z_BiasError = 0.0;
+uint8_t Xval, Yval = 0x00;
+
+
+/*
+int delay(int k){
+	volatile uint32_t i;
+	for (i=0; i != 0x80000; i++);
+	return 0;
+}
+*/
+int main(void)
+{
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
+GPIO_InitTypeDef  ledinit;  // создаем структуру
+
+ledinit.GPIO_Mode = GPIO_Mode_OUT;  // направление - выход
+ledinit.GPIO_OType = GPIO_OType_PP;  // Двухтактный выход
+ledinit.GPIO_PuPd = GPIO_PuPd_NOPULL;  // Без подтяжки
+ledinit.GPIO_Speed = GPIO_Speed_2MHz;  // Скорость низкая
+ledinit.GPIO_Pin = GPIO_Pin_12; // Светодиод на 15м выводе
+GPIO_Init(GPIOD, &ledinit);
+
+// Включаем светодиод
+GPIO_SetBits(GPIOD, GPIO_Pin_12);
+
+
+
+// Теперь выключаем светодиод
+//GPIO_ResetBits(GPIOD, GPIO_Pin_15);
+
+
+
+
+while(1)
+{
+
+}
+
+  // Функция, выполняющая настройку портов
+
+}
+
+
+// Demo_GyroConfig();
