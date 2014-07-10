@@ -1,64 +1,82 @@
-#include <stm32f10x_rcc.h>
-#include<stm32f10x_gpio.h>
-#include "stm32f10x.h"
+#include <stm32f4xx_rcc.h>
+#include<stm32f4xx_gpio.h>
+#include "stm32f4xx.h"
+//#include <stm32f429i_discovery_l3gd20.h>
+#include "stm32f4xx.h"
+#include <stdio.h>
+#include "main.h"
+#include "stm32f4xx_it.h"
+#include <misc.h>
+float Buffer[6];
+float Gyro[3];
+float X_BiasError, Y_BiasError, Z_BiasError = 0.0;
+uint8_t Xval, Yval = 0x00;
 
-int func;
-func=0;
-void Delay(void){
+
+void Delays(void){
 	volatile uint32_t i;
-	for (i=0; i != 0x80000; i++);
+	for (i=0; i != 0x800000; i++);
 }
+
 int main(void)
 {
-   GPIO_InitTypeDef PORT;
-   RCC_APB2PeriphClockCmd((RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOA) , ENABLE);
-    // сервы висят на па1 и па2. используем встроенную кнопку и диод на пс 8, па0 кнопка
-    //GPIOA->CRL |=
-    //diod
-   GPIOC->CRH |=0x33;
-     GPIOC->CRH &= ~0xCC;
-    GPIOA->CRH |=0x3;
-    GPIOA->CRH &=0xC;
-    //button
-    GPIOA->CRL |= 0x04; //mode в 00
-    GPIOA->CRL &= ~0x11; //0xb;
-    //Прерывания - это альтернативная функция порта
-  //поэтому надо установить бит Alternate function I/O clock enable
-  //в регистре RCC_APB2ENR
-  RCC_APB2PeriphClockCmd(RCC_APB2ENR_AFIOEN , ENABLE);
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD|RCC_AHB1Periph_GPIOA, ENABLE);
+GPIO_InitTypeDef  ledinit;  // создаем структуру
+GPIO_InitTypeDef button;
+ledinit.GPIO_Mode = GPIO_Mode_OUT;  // направление - выход
+ledinit.GPIO_OType = GPIO_OType_PP;  // Двухтактный выход
+ledinit.GPIO_PuPd = GPIO_PuPd_NOPULL;  // Без подтяжки
+ledinit.GPIO_Speed = GPIO_Speed_2MHz;  // Скорость низкая
+ledinit.GPIO_Pin = GPIO_Pin_12;
+ledinit.GPIO_Pin = GPIO_Pin_8;// 
+GPIO_Init(GPIOD, &ledinit);
+button.GPIO_Mode=GPIO_Mode_IN;
+button.GPIO_PuPd = GPIO_PuPd_NOPULL;  // Без подтяжки
+button.GPIO_Speed = GPIO_Speed_2MHz;  // Скорость низкая
+button.GPIO_Pin = GPIO_Pin_0;
 
- //Наша задача получить в регистре EXTICR[0] такую комбинацию бит
-  // 0000 0000 0001 0000
-  // по умолчанию там ноли, поэтому установим только 1 бит
-  AFIO->EXTICR[0]|=AFIO_EXTICR1_EXTI1_PB;
-  //Прерывания от нулевой и первой ноги разрешены
-  EXTI->IMR|=(EXTI_IMR_MR0 | EXTI_IMR_MR1);
-  //Прерывания на обоих ногах по нарастающему фронту
-  EXTI->RTSR|=(EXTI_RTSR_TR0 | EXTI_RTSR_TR1);
-  //Разрешаем оба прерывания
-  uint32_t func;
-    func=0;
-  NVIC_EnableIRQ (EXTI0_IRQn);
-// NVIC_EnableIRQ (EXTI1_IRQn);
+// Включаем светодиод
+//GPIO_SetBits(GPIOD, GPIO_Pin_12);
 
-  while(1)
-  {
-     //Программа ничего не делает в пустом цикле
-  }
+//Прерывания - это альтернативная функция порта
+SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOA,EXTI_PinSource0);
+EXTI_InitTypeDef exti;  // структура для настроки
+exti.EXTI_Line = EXTI_Line0;    /// кнопка на линии 0
+exti.EXTI_Mode = EXTI_Mode_Interrupt;    // прерывание (а не событие)
+exti.EXTI_Trigger = EXTI_Trigger_Rising;  // срабатываем по переднему фронту импульса
+exti.EXTI_LineCmd = ENABLE;    /// вкл
+
+EXTI_Init(&exti);
+
+NVIC_InitTypeDef nvic;
+nvic.NVIC_IRQChannel = EXTI0_IRQn;  // указываем канал IRQ
+nvic.NVIC_IRQChannelPreemptionPriority = 2;  // приоритет канала ( 0 (самый приоритетный) - 15)
+nvic.NVIC_IRQChannelSubPriority = 2;  // приоритет подгруппы
+nvic.NVIC_IRQChannelCmd = ENABLE;
+
+NVIC_Init(&nvic);
+
+// Теперь выключаем светодиод
+//GPIO_ResetBits(GPIOD, GPIO_Pin_15);
+
+
+
+
+while(1)
+{
+
 }
 
+  // Функция, выполняющая настройку портов
 
-// Обработчик прерывания EXTI0
+}
 void EXTI0_IRQHandler(void)
 {
-  if (func==0){
-  GPIOC->BSRR=(GPIO_BSRR_BS9); //Инвертируем состояние светодиода
-  func=1;
-  Delay();
-  }else{
-  GPIOC->BSRR=(GPIO_BSRR_BR9);
-  func=0;
-  Delay();
-  }
-  EXTI->PR|=0x01; //Очищаем флаг
+	if ((GPIOA->IDR & 0x01)==0x01) {
+			GPIO_SetBits(GPIOD, GPIO_Pin_8);
+			Delays();
+			GPIO_ResetBits(GPIOD, GPIO_Pin_8);
+
+		}
 }
+
