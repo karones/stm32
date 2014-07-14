@@ -1,105 +1,24 @@
-//добавить инклуды. не помню наизусть
-
-
+#include <stm32f4xx_rcc.h>
+#include<stm32f4xx_gpio.h>
+#include "stm32f4xx.h"
+#include <stm32f429i_discovery_l3gd20.h>
+#include "stm32f4xx.h"
+#include <stdio.h>
+#include "main.h"
+#include "stm32f4xx_it.h"
+#include <misc.h>
 float Buffer[6];
 float Gyro[3];
 float X_BiasError, Y_BiasError, Z_BiasError = 0.0;
 uint8_t Xval, Yval = 0x00;
-
-
-
-
-
-int main(void)
+uint32_t L3GD20_TIMEOUT_UserCallback(void);
+#define ABS(x)                     (x < 0) ? (-x) : x
+uint32_t L3GD20_TIMEOUT_UserCallback(void)
 {
-GPIO_InitTypeDef  ledinit;  // создаем структуру
-
-ledinit.GPIO_Mode = GPIO_Mode_OUT;  // направление - выход
-ledinit.GPIO_OType = GPIO_OType_PP;  // Двухтактный выход
-ledinit.GPIO_PuPd = GPIO_PuPd_NOPULL;  // Без подтяжки
-ledinit.GPIO_Speed = GPIO_Speed_2MHz;  // Скорость низкая
-ledinit.GPIO_Pin = GPIO_Pin_15; // Светодиод на 15м выводе
-
-
-// Включаем светодиод
-GPIO_SetBits(GPIOD, GPIO_Pin_15);
-
-...
-
-// Теперь выключаем светодиод
-GPIO_ResetBits(GPIOD, GPIO_Pin_15);
-
-
-
-
-
-
-GPIO_Init(GPIOD, &ledinit);  // Функция, выполняющая настройку портов
-
- Demo_GyroConfig();
-
-  /* Gyroscope calibration */
-  Gyro_SimpleCalibration(Gyro);
-
-  /* Infinite loop */
-  while (1)
-  {
-    Demo_MEMS();
-  }
+  return 0;
 }
 
 
-static void Demo_MEMS(void)
-{
-  /* Gyroscope configuration */
-  Demo_GyroConfig();
-
-  /* Read Gyro Angular data */
-  Demo_GyroReadAngRate(Buffer);
-
-  Buffer[0] = (int8_t)Buffer[0] - (int8_t)Gyro[0];
-  Buffer[1] = (int8_t)Buffer[1] - (int8_t)Gyro[1];
-
-  /* Update autoreload and capture compare registers value*/
-  Xval = ABS((int8_t)(Buffer[0]));
-  Yval = ABS((int8_t)(Buffer[1]));
-
-  if ( Xval>Yval)
-  {
-    if ((int16_t)Buffer[0] > 40)
-    {
-      /* Clear the LCD */
-    GPIO_SetBits(GPIOD, GPIO_Pin_15);
-
-      Delay(50);GPIO_ResetBits(GPIOD, GPIO_Pin_15);
-    }
-    if ((int16_t)Buffer[0] < -40)
-    {
-      /* Clear the LCD */
-GPIO_SetBits(GPIOD, GPIO_Pin_15);
-
-      Delay(50);GPIO_ResetBits(GPIOD, GPIO_Pin_15);
-    }
-  }
-  else
-  {
-    if ((int16_t)Buffer[1] < -40)
-    {
-      /* Clear the LCD */
-GPIO_SetBits(GPIOD, GPIO_Pin_15);
-
-      Delay(50);GPIO_ResetBits(GPIOD, GPIO_Pin_15);
-    }
-    if ((int16_t)Buffer[1] > 40)
-    {
-      /* Clear the LCD */
-GPIO_SetBits(GPIOD, GPIO_Pin_15);
-
-      Delay(50);
-    GPIO_ResetBits(GPIOD, GPIO_Pin_15);
-    }
-  }
-}
 static void Demo_GyroConfig(void)
 {
   L3GD20_InitTypeDef L3GD20_InitStructure;
@@ -121,12 +40,10 @@ static void Demo_GyroConfig(void)
 
   L3GD20_FilterCmd(L3GD20_HIGHPASSFILTER_ENABLE);
 }
-
-/**
-* @brief  Calculate the angular Data rate Gyroscope.
-* @param  pfData : Data out pointer
-* @retval None
-*/
+void Delays(void){
+	volatile uint32_t i;
+	for (i=0; i != 0x800000; i++);
+}
 static void Demo_GyroReadAngRate (float* pfData)
 {
   uint8_t tmpbuffer[6] ={0};
@@ -156,32 +73,17 @@ static void Demo_GyroReadAngRate (float* pfData)
   }
 
   /* Switch the sensitivity value set in the CRTL4 */
-  switch(tmpreg & 0x30)
-  {
-  case 0x00:
-    sensitivity=L3G_Sensitivity_250dps;
-    break;
 
-  case 0x10:
-    sensitivity=L3G_Sensitivity_500dps;
-    break;
+      sensitivity=1;
 
-  case 0x20:
-    sensitivity=L3G_Sensitivity_2000dps;
-    break;
-  }
-  /* divide by sensitivity */
-  for(i=0; i<3; i++)
-  {
-  pfData[i]=(float)RawData[i]/sensitivity;
-  }
+    /* divide by sensitivity */
+    for(i=0; i<3; i++)
+    {
+    pfData[i]=(float)RawData[i]/sensitivity;
+    }
+
 }
 
-/**
-* @brief  Calculate offset of the angular Data rate Gyroscope.
-* @param  GyroData : Data out pointer
-* @retval None
-*/
 static void Gyro_SimpleCalibration(float* GyroData)
 {
   uint32_t BiasErrorSplNbr = 500;
@@ -203,4 +105,63 @@ static void Gyro_SimpleCalibration(float* GyroData)
   GyroData[0] = X_BiasError;
   GyroData[1] = Y_BiasError;
   GyroData[2] = Z_BiasError;
+}
+
+int main(void)
+{
+RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD|RCC_AHB1Periph_GPIOA, ENABLE);
+GPIO_InitTypeDef  ledinit;  // создаем структуру
+GPIO_InitTypeDef button;
+ledinit.GPIO_Mode = GPIO_Mode_OUT;  // направление - выход
+ledinit.GPIO_OType = GPIO_OType_PP;  // Двухтактный выход
+ledinit.GPIO_PuPd = GPIO_PuPd_NOPULL;  // Без подтяжки
+ledinit.GPIO_Speed = GPIO_Speed_2MHz;  // Скорость низкая
+ledinit.GPIO_Pin = GPIO_Pin_12;
+//ledinit.GPIO_Pin = GPIO_Pin_8;//
+GPIO_Init(GPIOD, &ledinit);
+button.GPIO_Mode=GPIO_Mode_IN;
+button.GPIO_PuPd = GPIO_PuPd_NOPULL;  // Без подтяжки
+button.GPIO_Speed = GPIO_Speed_2MHz;  // Скорость низкая
+button.GPIO_Pin = GPIO_Pin_0;
+
+/* Gyroscope configuration */
+  Demo_GyroConfig();
+
+  /* Gyroscope calibration */
+  Gyro_SimpleCalibration(Gyro);
+// Теперь выключаем светодиод
+//GPIO_ResetBits(GPIOD, GPIO_Pin_15);
+
+
+
+
+while(1)
+{
+	Demo_MEMS();
+}
+
+  // Функция, выполняющая настройку портов
+
+}
+
+void Demo_MEMS(void)
+{
+  /* Gyroscope configuration */
+  Demo_GyroConfig();
+
+  /* Read Gyro Angular data */
+  Demo_GyroReadAngRate(Buffer);
+
+  Buffer[0] = (int8_t)Buffer[0] - (int8_t)Gyro[0];
+  Buffer[1] = (int8_t)Buffer[1] - (int8_t)Gyro[1];
+
+  /* Update autoreload and capture compare registers value*/
+  Xval = ABS((int8_t)(Buffer[0]));
+  Yval = ABS((int8_t)(Buffer[1]));
+  if ((Xval>0x70)||(Yval>0x70))
+  {
+	  GPIO_SetBits(GPIOD, GPIO_Pin_12);
+	  Delays();
+	  GPIO_ResetBits(GPIOD, GPIO_Pin_12);
+  }
 }
