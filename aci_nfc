@@ -1,0 +1,257 @@
+#include <stm32f4xx_rcc.h>
+#include<stm32f4xx_gpio.h>
+#include "stm32f4xx.h"
+#include <stm32f429i_discovery_l3gd20.h>
+#include "stm32f4xx.h"
+#include <stdio.h>
+#include "main.h"
+#include "stm32f4xx_it.h"
+#include <misc.h>
+float Buffer[6];
+float Gyro[3];
+float X_BiasError, Y_BiasError, Z_BiasError = 0.0;
+uint8_t Xval, Yval = 0x00;
+uint32_t L3GD20_TIMEOUT_UserCallback(void);
+#define ABS(x) (x < 0) ? (-x) : x
+GPIO_InitTypeDef ledinit; // создаем структуру
+
+uint32_t L3GD20_TIMEOUT_UserCallback(void)
+{
+  return 0;
+}
+
+
+static void Demo_GyroConfig(void)
+{
+  L3GD20_InitTypeDef L3GD20_InitStructure;
+  L3GD20_FilterConfigTypeDef L3GD20_FilterStructure;
+
+  /* Configure Mems L3GD20 */
+  L3GD20_InitStructure.Power_Mode = L3GD20_MODE_ACTIVE;
+  L3GD20_InitStructure.Output_DataRate = L3GD20_OUTPUT_DATARATE_1;
+  L3GD20_InitStructure.Axes_Enable = L3GD20_AXES_ENABLE;
+  L3GD20_InitStructure.Band_Width = L3GD20_BANDWIDTH_4;
+  L3GD20_InitStructure.BlockData_Update = L3GD20_BlockDataUpdate_Continous;
+  L3GD20_InitStructure.Endianness = L3GD20_BLE_LSB;
+  L3GD20_InitStructure.Full_Scale = L3GD20_FULLSCALE_500;
+  L3GD20_Init(&L3GD20_InitStructure);
+
+  L3GD20_FilterStructure.HighPassFilter_Mode_Selection =L3GD20_HPM_NORMAL_MODE_RES;
+  L3GD20_FilterStructure.HighPassFilter_CutOff_Frequency = L3GD20_HPFCF_0;
+  L3GD20_FilterConfig(&L3GD20_FilterStructure) ;
+
+  L3GD20_FilterCmd(L3GD20_HIGHPASSFILTER_ENABLE);
+}
+void Delays(void){
+volatile uint32_t i;
+for (i=0; i != 0x800000; i++);
+}
+static void Demo_GyroReadAngRate (float* pfData)
+{
+  uint8_t tmpbuffer[6] ={0};
+  int16_t RawData[3] = {0};
+  uint8_t tmpreg = 0;
+  float sensitivity = 0;
+  int i =0;
+
+  L3GD20_Read(&tmpreg,L3GD20_CTRL_REG4_ADDR,1);
+
+  L3GD20_Read(tmpbuffer,L3GD20_OUT_X_L_ADDR,6);
+
+  /* check in the control register 4 the data alignment (Big Endian or Little Endian)*/
+  if(!(tmpreg & 0x40))
+  {
+    for(i=0; i<3; i++)
+    {
+      RawData[i]=(int16_t)(((uint16_t)tmpbuffer[2*i+1] << 8) + tmpbuffer[2*i]);
+    }
+  }
+  else
+  {
+    for(i=0; i<3; i++)
+    {
+      RawData[i]=(int16_t)(((uint16_t)tmpbuffer[2*i] << 8) + tmpbuffer[2*i+1]);
+    }
+  }
+
+  /* Switch the sensitivity value set in the CRTL4 */
+
+      sensitivity=1;
+
+    /* divide by sensitivity */
+    for(i=0; i<3; i++)
+    {
+    pfData[i]=(float)RawData[i]/sensitivity;
+    }
+
+}
+
+static void Gyro_SimpleCalibration(float* GyroData)
+{
+  uint32_t BiasErrorSplNbr = 500;
+  int i = 0;
+
+  for (i = 0; i < BiasErrorSplNbr; i++)
+  {
+    Demo_GyroReadAngRate(GyroData);
+    X_BiasError += GyroData[0];
+    Y_BiasError += GyroData[1];
+    Z_BiasError += GyroData[2];
+  }
+  /* Set bias errors */
+  X_BiasError /= BiasErrorSplNbr;
+  Y_BiasError /= BiasErrorSplNbr;
+  Z_BiasError /= BiasErrorSplNbr;
+
+  /* Get offset value on X, Y and Z */
+  GyroData[0] = X_BiasError;
+  GyroData[1] = Y_BiasError;
+  GyroData[2] = Z_BiasError;
+}
+
+void init_gyro_led(void)
+{
+RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD|RCC_AHB1Periph_GPIOA, ENABLE);
+ledinit.GPIO_Mode = GPIO_Mode_OUT; // направление - выход
+ledinit.GPIO_OType = GPIO_OType_PP; // Двухтактный выход
+ledinit.GPIO_PuPd = GPIO_PuPd_NOPULL; // Без подтяжки
+ledinit.GPIO_Speed = GPIO_Speed_2MHz; // Скорость низкая
+ledinit.GPIO_Pin = GPIO_Pin_12;
+//ledinit.GPIO_Pin = GPIO_Pin_8;//
+GPIO_Init(GPIOD, &ledinit);
+
+}
+
+
+void init_nfc(void)
+{
+
+    // Включаем тактирование нужных модулей
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);
+
+    // А вот и настройка I2C
+    i2c.I2C_ClockSpeed = 100000;
+    i2c.I2C_Mode = I2C_Mode_I2C;
+    i2c.I2C_DutyCycle = I2C_DutyCycle_2;
+    // Адрес я тут взял первый пришедший в голову
+    i2c.I2C_OwnAddress1 = 0x15;
+    i2c.I2C_Ack = I2C_Ack_Disable;
+    i2c.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit;
+    I2C_Init(I2C1, &i2c);
+
+    // I2C использует две ноги микроконтроллера, их тоже нужно настроить
+    gpio.GPIO_Pin = GPIO_Pin_6 | GPIO_Pin_7;  //b6 and b7
+    gpio.GPIO_Mode = GPIO_Mode_AF;
+    gpio.GPIO_Speed = GPIO_Speed_50MHz;
+    gpio.GPIO_OType = GPIO_OType_OD;
+    gpio.GPIO_PuPd = GPIO_PuPd_UP;
+    GPIO_Init(GPIOB, &gpio);
+
+    GPIO_PinAFConfig(GPIOB, GPIO_PinSource6, GPIO_AF_I2C1);
+    GPIO_PinAFConfig(GPIOB, GPIO_PinSource7, GPIO_AF_I2C1);
+
+    // Ну и включаем, собственно, модуль I2C1
+    I2C_Cmd(I2C1, ENABLE);
+}
+
+//функцию мы будем передавать три параметра — номер используемого модуля I2C, направление передачи данных и адрес подчиненного устройства.
+
+void I2C_StartTransmission(I2C_TypeDef* I2Cx, uint8_t transmissionDirection,  uint8_t slaveAddress)
+{
+    // На всякий слуыай ждем, пока шина осовободится
+    while(I2C_GetFlagStatus(I2Cx, I2C_FLAG_BUSY));
+
+    // Генерируем старт - тут все понятно )
+    I2C_GenerateSTART(I2Cx, ENABLE);
+
+    // Ждем пока взлетит нужный флаг
+    while(!I2C_CheckEvent(I2Cx, I2C_EVENT_MASTER_MODE_SELECT));
+
+    // Посылаем адрес подчиненному
+    I2C_Send7bitAddress(I2Cx, slaveAddress, transmissionDirection);
+
+    // А теперь у нас два варианта развития событий - в зависимости от выбранного направления обмена данными
+    if(transmissionDirection== I2C_Direction_Transmitter)
+    {
+    	while(!I2C_CheckEvent(I2Cx, I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED));
+    }
+
+    if(transmissionDirection== I2C_Direction_Receiver)
+    {
+	while(!I2C_CheckEvent(I2Cx, I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED));
+    }
+
+
+    // I2C_GenerateSTOP(I2Cx, ENABLE).
+
+}
+
+void I2C_WriteData(I2C_TypeDef* I2Cx, uint8_t data)
+{
+    // Просто вызываем готоваую функцию из SPL и ждем, пока данные улетят
+    I2C_SendData(I2Cx, data);
+    while(!I2C_CheckEvent(I2Cx, I2C_EVENT_MASTER_BYTE_TRANSMITTED));
+}
+
+
+
+/*******************************************************************/
+uint8_t I2C_ReadData(I2C_TypeDef* I2Cx)
+{
+    // Тут картина похожа, как только данные пришли быстренько считываем их и возвращаем
+    while( !I2C_CheckEvent(I2Cx, I2C_EVENT_MASTER_BYTE_RECEIVED) );
+    data = I2C_ReceiveData(I2Cx);
+    return data;
+}
+
+
+
+int main(void)
+{
+
+init_gyro_led();
+
+
+
+/* Gyroscope configuration */
+  Demo_GyroConfig();
+
+  /* Gyroscope calibration */
+  Gyro_SimpleCalibration(Gyro);
+// Теперь выключаем светодиод
+//GPIO_ResetBits(GPIOD, GPIO_Pin_15);
+
+
+
+
+while(1)
+{
+//Demo_MEMS();
+}
+
+  // Функция, выполняющая настройку портов
+
+}
+
+void Demo_MEMS(void)
+{
+  /* Gyroscope configuration */
+  Demo_GyroConfig();
+
+  /* Read Gyro Angular data */
+  Demo_GyroReadAngRate(Buffer);
+
+  Buffer[0] = (int8_t)Buffer[0] - (int8_t)Gyro[0];
+  Buffer[1] = (int8_t)Buffer[1] - (int8_t)Gyro[1];
+
+  /* Update autoreload and capture compare registers value*/
+  Xval = ABS((int8_t)(Buffer[0]));
+  Yval = ABS((int8_t)(Buffer[1]));
+  if ((Xval>0x70)||(Yval>0x70))
+  {
+GPIO_SetBits(GPIOD, GPIO_Pin_12);
+Delays();
+GPIO_ResetBits(GPIOD, GPIO_Pin_12);
+  }
+}
