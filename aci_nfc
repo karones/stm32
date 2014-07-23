@@ -14,12 +14,12 @@ uint8_t Xval, Yval = 0x00;
 uint32_t L3GD20_TIMEOUT_UserCallback(void);
 #define ABS(x) (x < 0) ? (-x) : x
 GPIO_InitTypeDef ledinit; // создаем структуру
-
+GPIO_InitTypeDef gpio;
 uint32_t L3GD20_TIMEOUT_UserCallback(void)
 {
   return 0;
 }
-
+I2C_InitTypeDef i2c;
 
 static void Demo_GyroConfig(void)
 {
@@ -199,6 +199,7 @@ void I2C_WriteData(I2C_TypeDef* I2Cx, uint8_t data)
 /*******************************************************************/
 uint8_t I2C_ReadData(I2C_TypeDef* I2Cx)
 {
+	float data;
     // Тут картина похожа, как только данные пришли быстренько считываем их и возвращаем
     while( !I2C_CheckEvent(I2Cx, I2C_EVENT_MASTER_BYTE_RECEIVED) );
     data = I2C_ReceiveData(I2Cx);
@@ -210,19 +211,19 @@ uint8_t I2C_ReadData(I2C_TypeDef* I2Cx)
 int main(void)
 {
 
-init_gyro_led();
+//init_gyro_led();
 
 
 
 /* Gyroscope configuration */
-  Demo_GyroConfig();
-
+//  Demo_GyroConfig();
+//
   /* Gyroscope calibration */
-  Gyro_SimpleCalibration(Gyro);
+//  Gyro_SimpleCalibration(Gyro);
 // Теперь выключаем светодиод
 //GPIO_ResetBits(GPIOD, GPIO_Pin_15);
 
-
+init_nfc();
 
 
 while(1)
