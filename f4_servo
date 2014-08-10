@@ -134,6 +134,12 @@ int main(void)
     channel.TIM_OCPolarity = TIM_OCPolarity_High;
     TIM_OC1Init(TIM4, &channel);
     TIM_OC1PreloadConfig(TIM4, TIM_OCPreload_Enable);
+    TIM_OCInitTypeDef channe2;
+       channe2.TIM_OCMode = TIM_OCMode_PWM1;
+       channe2.TIM_OutputState = TIM_OutputState_Enable;
+       channe2.TIM_Pulse = 100;
+       channe2.TIM_OCPolarity = TIM_OCPolarity_High;
+       TIM_OC2Init(TIM4, &channe2);
 
     TIM_CtrlPWMOutputs(TIM4, ENABLE);
     TIM_Cmd(TIM4, ENABLE);
@@ -144,14 +150,18 @@ int i;
   {
 	//  for (i=100;i<500;i+10){
 	  TIM_SetCompare1(TIM4, 100);
+	  TIM_SetCompare2(TIM4, 100);
 	  Delays();
 	//  if (i==450){
 	//	  i=110;}
 	  TIM_SetCompare1(TIM4, 200);
+	  TIM_SetCompare2(TIM4, 200);
 	  	  Delays();
 	  	TIM_SetCompare1(TIM4, 300);
+	  	TIM_SetCompare2(TIM4, 300);
 	  		  Delays();
 	  		TIM_SetCompare1(TIM4, 390);
+	  		TIM_SetCompare2(TIM4, 390);
 	  			  Delays();
 
   }
