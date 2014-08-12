@@ -2,7 +2,7 @@
 
 TIM_OCInitTypeDef  TIM_OCInitStructure;
 
-//uint16_t PrescalerValue = 0;
+uint16_t PrescalerValue = 0;
 int pol; //0=100; 1=400;
 void TIM_Config(void);
 
@@ -92,7 +92,7 @@ int i;
   */
 void Delays(void){
 	volatile uint32_t i;
-	for (i=0; i != 0x800000; i++);
+	for (i=0; i != 0x888888; i++);
 }
 
 void EXTI0_IRQHandler(void)
@@ -102,11 +102,13 @@ void EXTI0_IRQHandler(void)
             pol=1;
             	TIM_SetCompare1(TIM4, 390);
 	  		TIM_SetCompare2(TIM4, 390);
+	  		Delays();
 
         }else{
             pol=0;
             TIM_SetCompare1(TIM4, 100);
 	  		TIM_SetCompare2(TIM4, 100);
+	  		Delays();
         }
 
 }
@@ -135,4 +137,3 @@ void TIM_Config(void)
   GPIO_PinAFConfig(GPIOD, GPIO_PinSource13, GPIO_AF_TIM4);
 
 }
-
