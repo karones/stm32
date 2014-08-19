@@ -5,7 +5,7 @@ TIM_OCInitTypeDef  TIM_OCInitStructure;
 uint16_t PrescalerValue = 0;
 int pol; //0=100; 1=400;
 void TIM_Config(void);
-
+EXTI_InitTypeDef exti;
 
 int main(void)
 {
@@ -41,7 +41,7 @@ int main(void)
     button.GPIO_Speed = GPIO_Speed_2MHz; // Скорость низкая
     button.GPIO_Pin = GPIO_Pin_0;
     SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOA,EXTI_PinSource0);
-EXTI_InitTypeDef exti; // структура для настроки
+ // структура для настроки
 exti.EXTI_Line = EXTI_Line0; /// кнопка на линии 0
 exti.EXTI_Mode = EXTI_Mode_Interrupt; // прерывание (а не событие)
 exti.EXTI_Trigger = EXTI_Trigger_Rising; // срабатываем по переднему фронту импульса
@@ -77,8 +77,9 @@ NVIC_Init(&nvic);
     TIM_CtrlPWMOutputs(TIM4, ENABLE);
     TIM_Cmd(TIM4, ENABLE);
 
-    TIM_SetCompare1(TIM4, 350); //так менять скважность
+  //  TIM_SetCompare1(TIM4, 350); //так менять скважность
 int i;
+pol=0;
   while (1)
   {
 
@@ -95,22 +96,19 @@ void Delays(void){
 	for (i=0; i != 0x888888; i++);
 }
 
-void EXTI0_IRQHandler(void)
+
+ EXTI0_IRQHandler(void)
 {
-    if (pol==0)
-        {
-            pol=1;
-            	TIM_SetCompare1(TIM4, 390);
-	  		TIM_SetCompare2(TIM4, 390);
-	  		Delays();
-
-        }else{
-            pol=0;
-            TIM_SetCompare1(TIM4, 100);
-	  		TIM_SetCompare2(TIM4, 100);
-	  		Delays();
-        }
-
+	if (pol<350)
+	{
+		pol=380;
+	}else{
+		pol=100;
+	}
+	TIM_SetCompare1(TIM4, pol);
+			  		TIM_SetCompare2(TIM4, pol);
+			  		Delays();
+    	EXTI_ClearITPendingBit(EXTI_Line0);
 }
 
 
