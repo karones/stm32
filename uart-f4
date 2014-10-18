@@ -110,35 +110,19 @@ void USART_puts(USART_TypeDef* USARTx, char * s){
 	}
 }
 
-void send_Uart(const char * str) // отправить байт
-{
-	int i=0;
-	while (str[i]){
-		USART_SendData(USART1, (uint8_t)str[i]);
-		i++;
-		while(USART_GetFlagStatus(USART1, USART_FLAG_TXE)== RESET){}
-
-}
-}
 int main(void) {
 
   init_USART1(9600); // initialize USART1 @ 9600 baud
 
  USART_puts(USART1, "Init complete! Hello World!\n"); // just send a message to indicate that it works
-  int  b=1111;
-//for ( b=0;b<10;b++)
-//	  {
-		  USART_puts(USART1, b);
-	//*/
-//	USART_SendData(USART1,b);
-		//send_Uart(USART1,b);
-	  //}*/
-  unsigned char f='d';
- /// for (b=0;b<10;b++){
- // send_Uart(b);
-//	  USART_SendData(USART1,b);
- // Delay(5555);
-  //}
+  int  b=0;
+  char s[124];
+  int size=0;
+
+  for ( b=0;b<10;b++){
+	size=sprintf( s, "id=%d\n",b );
+		  USART_puts(USART1, s);
+}
   while (1){
     /*
      * You can do whatever you want in here
@@ -167,7 +151,7 @@ void USART1_IRQHandler(void){
 		}
 		else{ // otherwise reset the character counter and print the received string
 			cnt = 0;
-		//	USART_puts(USART1, received_string);
+			USART_puts(USART1, received_string);
 		}
 	}
 }
