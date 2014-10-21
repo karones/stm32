@@ -1,134 +1,112 @@
-#include <stm32f4xx_rcc.h>
-#include<stm32f4xx_gpio.h>
-#include "stm32f4xx.h"
-#include <stm32f429i_discovery_l3gd20.h>
-#include "stm32f4xx.h"
-#include <stdio.h>
-#include "main.h"
-#include "stm32f4xx_it.h"
-#include <misc.h>
-float Buffer[6];
-float Gyro[3];
-float X_BiasError, Y_BiasError, Z_BiasError = 0.0;
-uint8_t Xval, Yval = 0x00;
-uint32_t L3GD20_TIMEOUT_UserCallback(void);
-#define ABS(x) (x < 0) ? (-x) : x
-GPIO_InitTypeDef ledinit; // создаем структуру
-GPIO_InitTypeDef gpio;
-uint32_t L3GD20_TIMEOUT_UserCallback(void)
-{
-  return 0;
-}
-I2C_InitTypeDef i2c;
+#include <stm32f4xx.h>
+#include <misc.h>			 // I recommend you have a look at these in the ST firmware folder
+#include <stm32f4xx_usart.h> // under Libraries/STM32F4xx_StdPeriph_Driver/inc and src
 
-static void Demo_GyroConfig(void)
-{
-  L3GD20_InitTypeDef L3GD20_InitStructure;
-  L3GD20_FilterConfigTypeDef L3GD20_FilterStructure;
+#define MAX_STRLEN 12 // this is the maximum string length of our string in characters
+volatile char received_string[MAX_STRLEN+1]; // this will hold the recieved string
 
-  /* Configure Mems L3GD20 */
-  L3GD20_InitStructure.Power_Mode = L3GD20_MODE_ACTIVE;
-  L3GD20_InitStructure.Output_DataRate = L3GD20_OUTPUT_DATARATE_1;
-  L3GD20_InitStructure.Axes_Enable = L3GD20_AXES_ENABLE;
-  L3GD20_InitStructure.Band_Width = L3GD20_BANDWIDTH_4;
-  L3GD20_InitStructure.BlockData_Update = L3GD20_BlockDataUpdate_Continous;
-  L3GD20_InitStructure.Endianness = L3GD20_BLE_LSB;
-  L3GD20_InitStructure.Full_Scale = L3GD20_FULLSCALE_500;
-  L3GD20_Init(&L3GD20_InitStructure);
-
-  L3GD20_FilterStructure.HighPassFilter_Mode_Selection =L3GD20_HPM_NORMAL_MODE_RES;
-  L3GD20_FilterStructure.HighPassFilter_CutOff_Frequency = L3GD20_HPFCF_0;
-  L3GD20_FilterConfig(&L3GD20_FilterStructure) ;
-
-  L3GD20_FilterCmd(L3GD20_HIGHPASSFILTER_ENABLE);
-}
-void Delays(void){
-volatile uint32_t i;
-for (i=0; i != 0x800000; i++);
-}
-static void Demo_GyroReadAngRate (float* pfData)
-{
-  uint8_t tmpbuffer[6] ={0};
-  int16_t RawData[3] = {0};
-  uint8_t tmpreg = 0;
-  float sensitivity = 0;
-  int i =0;
-
-  L3GD20_Read(&tmpreg,L3GD20_CTRL_REG4_ADDR,1);
-
-  L3GD20_Read(tmpbuffer,L3GD20_OUT_X_L_ADDR,6);
-
-  /* check in the control register 4 the data alignment (Big Endian or Little Endian)*/
-  if(!(tmpreg & 0x40))
-  {
-    for(i=0; i<3; i++)
-    {
-      RawData[i]=(int16_t)(((uint16_t)tmpbuffer[2*i+1] << 8) + tmpbuffer[2*i]);
-    }
+void Delay(__IO uint32_t nCount) {
+  while(nCount--) {
   }
-  else
-  {
-    for(i=0; i<3; i++)
-    {
-      RawData[i]=(int16_t)(((uint16_t)tmpbuffer[2*i] << 8) + tmpbuffer[2*i+1]);
-    }
-  }
+}
+char s[1024];
+/* This funcion initializes the USART1 peripheral
+ *
+ * Arguments: baudrate --> the baudrate at which the USART is
+ * 						   supposed to operate
+ */
+void init_USART1(uint32_t baudrate){
 
-  /* Switch the sensitivity value set in the CRTL4 */
+	/* This is a concept that has to do with the libraries provided by ST
+	 * to make development easier the have made up something similar to
+	 * classes, called TypeDefs, which actually just define the common
+	 * parameters that every peripheral needs to work correctly
+	 *
+	 * They make our life easier because we don't have to mess around with
+	 * the low level stuff of setting bits in the correct registers
+	 */
+	GPIO_InitTypeDef GPIO_InitStruct; // this is for the GPIO pins used as TX and RX
+	USART_InitTypeDef USART_InitStruct; // this is for the USART1 initilization
+	NVIC_InitTypeDef NVIC_InitStructure; // this is used to configure the NVIC (nested vector interrupt controller)
 
-      sensitivity=1;
+	/* enable APB2 peripheral clock for USART1
+	 * note that only USART1 and USART6 are connected to APB2
+	 * the other USARTs are connected to APB1
+	 */
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1, ENABLE);
 
-    /* divide by sensitivity */
-    for(i=0; i<3; i++)
-    {
-    pfData[i]=(float)RawData[i]/sensitivity;
-    }
+	/* enable the peripheral clock for the pins used by
+	 * USART1, PB6 for TX and PB7 for RX
+	 */
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);
 
+	/* This sequence sets up the TX and RX pins
+	 * so they work correctly with the USART1 peripheral
+	 */
+	GPIO_InitStruct.GPIO_Pin = GPIO_Pin_6 | GPIO_Pin_7; // Pins 6 (TX) and 7 (RX) are used
+	GPIO_InitStruct.GPIO_Mode = GPIO_Mode_AF; 			// the pins are configured as alternate function so the USART peripheral has access to them
+	GPIO_InitStruct.GPIO_Speed = GPIO_Speed_50MHz;		// this defines the IO speed and has nothing to do with the baudrate!
+	GPIO_InitStruct.GPIO_OType = GPIO_OType_PP;			// this defines the output type as push pull mode (as opposed to open drain)
+	GPIO_InitStruct.GPIO_PuPd = GPIO_PuPd_UP;			// this activates the pullup resistors on the IO pins
+	GPIO_Init(GPIOB, &GPIO_InitStruct);					// now all the values are passed to the GPIO_Init() function which sets the GPIO registers
+
+	/* The RX and TX pins are now connected to their AF
+	 * so that the USART1 can take over control of the
+	 * pins
+	 */
+	GPIO_PinAFConfig(GPIOB, GPIO_PinSource6, GPIO_AF_USART1); //
+	GPIO_PinAFConfig(GPIOB, GPIO_PinSource7, GPIO_AF_USART1);
+
+	/* Now the USART_InitStruct is used to define the
+	 * properties of USART1
+	 */
+	USART_InitStruct.USART_BaudRate = baudrate;				// the baudrate is set to the value we passed into this init function
+	USART_InitStruct.USART_WordLength = USART_WordLength_8b;// we want the data frame size to be 8 bits (standard)
+	USART_InitStruct.USART_StopBits = USART_StopBits_1;		// we want 1 stop bit (standard)
+	USART_InitStruct.USART_Parity = USART_Parity_No;		// we don't want a parity bit (standard)
+	USART_InitStruct.USART_HardwareFlowControl = USART_HardwareFlowControl_None; // we don't want flow control (standard)
+	USART_InitStruct.USART_Mode = USART_Mode_Tx | USART_Mode_Rx; // we want to enable the transmitter and the receiver
+	USART_Init(USART1, &USART_InitStruct);					// again all the properties are passed to the USART_Init function which takes care of all the bit setting
+
+
+	/* Here the USART1 receive interrupt is enabled
+	 * and the interrupt controller is configured
+	 * to jump to the USART1_IRQHandler() function
+	 * if the USART1 receive interrupt occurs
+	 */
+	USART_ITConfig(USART1, USART_IT_RXNE, ENABLE); // enable the USART1 receive interrupt
+
+	NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;		 // we want to configure the USART1 interrupts
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;// this sets the priority group of the USART1 interrupts
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;		 // this sets the subpriority inside the group
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;			 // the USART1 interrupts are globally enabled
+	NVIC_Init(&NVIC_InitStructure);							 // the properties are passed to the NVIC_Init function which takes care of the low level stuff
+
+	// finally this enables the complete USART1 peripheral
+	USART_Cmd(USART1, ENABLE);
 }
 
-static void Gyro_SimpleCalibration(float* GyroData)
-{
-  uint32_t BiasErrorSplNbr = 500;
-  int i = 0;
-
-  for (i = 0; i < BiasErrorSplNbr; i++)
-  {
-    Demo_GyroReadAngRate(GyroData);
-    X_BiasError += GyroData[0];
-    Y_BiasError += GyroData[1];
-    Z_BiasError += GyroData[2];
-  }
-  /* Set bias errors */
-  X_BiasError /= BiasErrorSplNbr;
-  Y_BiasError /= BiasErrorSplNbr;
-  Z_BiasError /= BiasErrorSplNbr;
-
-  /* Get offset value on X, Y and Z */
-  GyroData[0] = X_BiasError;
-  GyroData[1] = Y_BiasError;
-  GyroData[2] = Z_BiasError;
-}
-
-void init_gyro_led(void)
-{
-RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD|RCC_AHB1Periph_GPIOA, ENABLE);
-ledinit.GPIO_Mode = GPIO_Mode_OUT; // направление - выход
-ledinit.GPIO_OType = GPIO_OType_PP; // Двухтактный выход
-ledinit.GPIO_PuPd = GPIO_PuPd_NOPULL; // Без подтяжки
-ledinit.GPIO_Speed = GPIO_Speed_2MHz; // Скорость низкая
-ledinit.GPIO_Pin = GPIO_Pin_12;
-//ledinit.GPIO_Pin = GPIO_Pin_8;//
-GPIO_Init(GPIOD, &ledinit);
-
-}
-
+/* This function is used to transmit a string of characters via
+ * the USART specified in USARTx.
+ *
+ * It takes two arguments: USARTx --> can be any of the USARTs e.g. USART1, USART2 etc.
+ * 						   (volatile) char *s is the string you want to send
+ *
+ * Note: The string has to be passed to the function as a pointer because
+ * 		 the compiler doesn't know the 'string' data type. In standard
+ * 		 C a string is just an array of characters
+ *
+ * Note 2: At the moment it takes a volatile char because the received_string variable
+ * 		   declared as volatile char --> otherwise the compiler will spit out warnings
+ * */
 
 void init_nfc(void)
 {
-
+	I2C_InitTypeDef i2c;
+	GPIO_InitTypeDef gpio;
     // Включаем тактирование нужных модулей
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
-    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
 
     // А вот и настройка I2C
     i2c.I2C_ClockSpeed = 100000;
@@ -141,15 +119,15 @@ void init_nfc(void)
     I2C_Init(I2C1, &i2c);
 
     // I2C использует две ноги микроконтроллера, их тоже нужно настроить
-    gpio.GPIO_Pin = GPIO_Pin_6 | GPIO_Pin_7;  //b6 and b7
+    gpio.GPIO_Pin = GPIO_Pin_6 | GPIO_Pin_7;  //a6 and b7
     gpio.GPIO_Mode = GPIO_Mode_AF;
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
     gpio.GPIO_OType = GPIO_OType_OD;
     gpio.GPIO_PuPd = GPIO_PuPd_UP;
-    GPIO_Init(GPIOB, &gpio);
+    GPIO_Init(GPIOA, &gpio);
 
-    GPIO_PinAFConfig(GPIOB, GPIO_PinSource6, GPIO_AF_I2C1);
-    GPIO_PinAFConfig(GPIOB, GPIO_PinSource7, GPIO_AF_I2C1);
+    GPIO_PinAFConfig(GPIOA, GPIO_PinSource6, GPIO_AF_I2C1);
+    GPIO_PinAFConfig(GPIOA, GPIO_PinSource7, GPIO_AF_I2C1);
 
     // Ну и включаем, собственно, модуль I2C1
     I2C_Cmd(I2C1, ENABLE);
@@ -199,60 +177,68 @@ void I2C_WriteData(I2C_TypeDef* I2Cx, uint8_t data)
 /*******************************************************************/
 uint8_t I2C_ReadData(I2C_TypeDef* I2Cx)
 {
+	USART_puts(USART1, "read\n");
 	float data;
     // Тут картина похожа, как только данные пришли быстренько считываем их и возвращаем
     while( !I2C_CheckEvent(I2Cx, I2C_EVENT_MASTER_BYTE_RECEIVED) );
     data = I2C_ReceiveData(I2Cx);
+    sprintf( s, "id=%f\n",data );
+    		  USART_puts(USART1, s);
     return data;
 }
 
+void USART_puts(USART_TypeDef* USARTx, char * s){
 
-
-int main(void)
-{
-
-//init_gyro_led();
-
-
-
-/* Gyroscope configuration */
-//  Demo_GyroConfig();
-//
-  /* Gyroscope calibration */
-//  Gyro_SimpleCalibration(Gyro);
-// Теперь выключаем светодиод
-//GPIO_ResetBits(GPIOD, GPIO_Pin_15);
-
-init_nfc();
-
-
-while(1)
-{
-//Demo_MEMS();
+	while(*s){
+		// wait until data register is empty
+		while( !(USARTx->SR & 0x00000040) );
+		USART_SendData(USARTx, *s);
+		*s++;
+	}
 }
 
-  // Функция, выполняющая настройку портов
+int main(void) {
 
-}
+  init_USART1(9600); // initialize USART1 @ 9600 baud
+ init_nfc();
+ USART_puts(USART1, "Init complete! Hello World!\n"); // just send a message to indicate that it works
+  int  b=0;
 
-void Demo_MEMS(void)
-{
-  /* Gyroscope configuration */
-  Demo_GyroConfig();
 
-  /* Read Gyro Angular data */
-  Demo_GyroReadAngRate(Buffer);
 
-  Buffer[0] = (int8_t)Buffer[0] - (int8_t)Gyro[0];
-  Buffer[1] = (int8_t)Buffer[1] - (int8_t)Gyro[1];
+  /*for ( b=0;b<10;b++){
+	sprintf( s, "id=%d\n",b );
+		  USART_puts(USART1, s);
+}*/
+  while (1){
+    /*
+     * You can do whatever you want in here
+     */
 
-  /* Update autoreload and capture compare registers value*/
-  Xval = ABS((int8_t)(Buffer[0]));
-  Yval = ABS((int8_t)(Buffer[1]));
-  if ((Xval>0x70)||(Yval>0x70))
-  {
-GPIO_SetBits(GPIOD, GPIO_Pin_12);
-Delays();
-GPIO_ResetBits(GPIOD, GPIO_Pin_12);
+
+
   }
+}
+
+// this is the interrupt request handler (IRQ) for ALL USART1 interrupts
+void USART1_IRQHandler(void){
+
+	// check if the USART1 receive interrupt flag was set
+	if( USART_GetITStatus(USART1, USART_IT_RXNE) ){
+
+		static uint8_t cnt = 0; // this counter is used to determine the string length
+		char t = USART1->DR; // the character from the USART1 data register is saved in t
+
+		/* check if the received character is not the LF character (used to determine end of string)
+		 * or the if the maximum string length has been been reached
+		 */
+		if( (t != 'n') && (cnt < MAX_STRLEN) ){
+			received_string[cnt] = t;
+			cnt++;
+		}
+		else{ // otherwise reset the character counter and print the received string
+			cnt = 0;
+			USART_puts(USART1, received_string);
+		}
+	}
 }
