@@ -1,7 +1,7 @@
 #include <stm32f4xx.h>
 #include <misc.h>			 // I recommend you have a look at these in the ST firmware folder
 #include <stm32f4xx_usart.h> // under Libraries/STM32F4xx_StdPeriph_Driver/inc and src
-
+#include<stm32f4xx_gpio.h>
 #define MAX_STRLEN 12 // this is the maximum string length of our string in characters
 volatile char received_string[MAX_STRLEN+1]; // this will hold the recieved string
 
@@ -9,7 +9,7 @@ void Delay(__IO uint32_t nCount) {
   while(nCount--) {
   }
 }
-
+char s[1024];
 /* This funcion initializes the USART1 peripheral
  *
  * Arguments: baudrate --> the baudrate at which the USART is
@@ -84,6 +84,8 @@ void init_USART1(uint32_t baudrate){
 
 	// finally this enables the complete USART1 peripheral
 	USART_Cmd(USART1, ENABLE);
+
+
 }
 
 /* This function is used to transmit a string of characters via
@@ -100,6 +102,95 @@ void init_USART1(uint32_t baudrate){
  * 		   declared as volatile char --> otherwise the compiler will spit out warnings
  * */
 
+void init_nfc(void)
+{
+	I2C_InitTypeDef i2c;
+	GPIO_InitTypeDef gpio;
+    // Включаем тактирование нужных модулей
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);
+
+    // А вот и настройка I2C
+    i2c.I2C_ClockSpeed = 400000; //документация
+    i2c.I2C_Mode = I2C_Mode_I2C;
+    i2c.I2C_DutyCycle = I2C_DutyCycle_2;
+    // Адрес я тут взял первый пришедший в голову
+    i2c.I2C_OwnAddress1 = 0x48; //документация))
+    i2c.I2C_Ack = I2C_Ack_Disable;
+    i2c.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit;
+    I2C_Init(I2C1, &i2c);
+
+    // I2C использует две ноги микроконтроллера, их тоже нужно настроить
+    gpio.GPIO_Pin = GPIO_Pin_8 | GPIO_Pin_9;  //b6 and b7
+    gpio.GPIO_Mode = GPIO_Mode_AF;
+    gpio.GPIO_Speed = GPIO_Speed_50MHz;
+    gpio.GPIO_OType = GPIO_OType_OD;
+    gpio.GPIO_PuPd = GPIO_PuPd_UP;
+    GPIO_Init(GPIOB, &gpio);
+    GPIO_PinAFConfig(GPIOB, GPIO_PinSource8, GPIO_AF_I2C1);
+    GPIO_PinAFConfig(GPIOB, GPIO_PinSource9, GPIO_AF_I2C1);
+
+    // Ну и включаем, собственно, модуль I2C1
+    I2C_Cmd(I2C1, ENABLE);
+    USART_puts(USART1, "init_nfc\n");
+}
+
+//функцию мы будем передавать три параметра — номер используемого модуля I2C, направление передачи данных и адрес подчиненного устройства.
+
+void I2C_StartTransmission(I2C_TypeDef* I2Cx, uint8_t transmissionDirection,  uint8_t slaveAddress)
+{
+	USART_puts(USART1, "I2c_starttransmission\n"); // just send a mes
+    // На всякий слуыай ждем, пока шина осовободится
+    while(I2C_GetFlagStatus(I2Cx, I2C_FLAG_BUSY));
+
+    // Генерируем старт - тут все понятно )
+    I2C_GenerateSTART(I2Cx, ENABLE);
+
+    // Ждем пока взлетит нужный флаг
+    while(!I2C_CheckEvent(I2Cx, I2C_EVENT_MASTER_MODE_SELECT));
+
+    // Посылаем адрес подчиненному
+    I2C_Send7bitAddress(I2Cx, slaveAddress, transmissionDirection);
+
+    // А теперь у нас два варианта развития событий - в зависимости от выбранного направления обмена данными
+    if(transmissionDirection== I2C_Direction_Transmitter)
+    {
+    	while(!I2C_CheckEvent(I2Cx, I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED));
+    }
+
+    if(transmissionDirection== I2C_Direction_Receiver)
+    {
+	while(!I2C_CheckEvent(I2Cx, I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED));
+    }
+
+
+   //  I2C_GenerateSTOP(I2Cx, ENABLE);
+
+}
+
+void I2C_WriteData(I2C_TypeDef* I2Cx, uint8_t data)
+{
+    // Просто вызываем готоваую функцию из SPL и ждем, пока данные улетят
+    I2C_SendData(I2Cx, data);
+    while(!I2C_CheckEvent(I2Cx, I2C_EVENT_MASTER_BYTE_TRANSMITTED));
+}
+
+
+
+/*******************************************************************/
+uint8_t I2C_ReadData(I2C_TypeDef* I2Cx)
+{
+	USART_puts(USART1, "read\n");
+	  GPIO_SetBits(GPIOG, GPIO_Pin_2);
+	float data;
+    // Тут картина похожа, как только данные пришли быстренько считываем их и возвращаем
+    while( !I2C_CheckEvent(I2Cx, I2C_EVENT_MASTER_BYTE_RECEIVED) );
+    data = I2C_ReceiveData(I2Cx);
+    sprintf( s, "id=%f\n",data );
+    		  USART_puts(USART1, s);
+    return data;
+}
+
 void USART_puts(USART_TypeDef* USARTx, char * s){
 
 	while(*s){
@@ -113,16 +204,29 @@ void USART_puts(USART_TypeDef* USARTx, char * s){
 int main(void) {
 
   init_USART1(9600); // initialize USART1 @ 9600 baud
+  USART_puts(USART1, "Init complete! Hello World!\n"); // just send a message to indicate that it works
+ init_nfc();
+ //I2C_StartTransmission(I2C1, 0x48, I2C_Direction_Receiver);
+ // int  b=0;
 
- USART_puts(USART1, "Init complete! Hello World!\n"); // just send a message to indicate that it works
-  int  b=0;
-  char s[124];
-  int size=0;
+  RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOG, ENABLE);
+  GPIO_InitTypeDef  ledinit;  // создаем структуру
 
-  for ( b=0;b<10;b++){
-	size=sprintf( s, "id=%d\n",b );
+  ledinit.GPIO_Mode = GPIO_Mode_OUT;  // направление - выход
+  ledinit.GPIO_OType = GPIO_OType_PP;  // Двухтактный выход
+  ledinit.GPIO_PuPd = GPIO_PuPd_NOPULL;  // Без подтяжки
+  ledinit.GPIO_Speed = GPIO_Speed_2MHz;  // Скорость низкая
+  ledinit.GPIO_Pin = GPIO_Pin_2; // Светодиод на 15м выводе
+  GPIO_Init(GPIOG, &ledinit);
+
+  // Включаем светодиод
+
+ //
+
+  /*for ( b=0;b<10;b++){
+	sprintf( s, "id=%d\n",b );
 		  USART_puts(USART1, s);
-}
+}*/
   while (1){
     /*
      * You can do whatever you want in here
