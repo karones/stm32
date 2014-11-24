@@ -1,0 +1,111 @@
+#include <stm32f4xx.h>
+#include <misc.h>			 // I recommend you have a look at these in the ST firmware folder
+#include <stm32f4xx_usart.h> // under Libraries/STM32F4xx_StdPeriph_Driver/inc and src
+#include<stm32f4xx_gpio.h>
+#include "main.h"
+#include <stm32f4xx_ltdc.h>
+#include "stm32f429i_discovery_lcd.h"
+
+#define MESSAGE1   "STM32F429I-Discoverry"   //
+  #define MESSAGE1_1 "    GPIO TEST        "
+  #define MESSAGE2   " LED3     LED4  "
+  #define MESSAGE2_1 "      ^-^       "
+  #define MESSAGE5   "   LED3 = %d"      //LED3
+  #define MESSAGE6   "   LED4 = %d"      //LED4
+  #define LINENUM            0x15        //
+  #define FONTSIZE         Font12x12     //
+
+void Delays(void){
+	volatile uint32_t i;
+	for (i=0; i != 0x800000; i++);
+}
+static void Display_Init(void)
+{
+  /* Initialize the LCD */
+  LCD_Init();
+  LCD_LayerInit();
+  /* Eable the LTDC */
+  LTDC_Cmd(ENABLE);
+
+  /* Set LCD Background Layer  */
+  LCD_SetLayer(LCD_BACKGROUND_LAYER);
+
+  /* Clear the Background Layer */
+  LCD_Clear(LCD_COLOR_WHITE);
+
+  /* Configure the transparency for background */
+  LCD_SetTransparency(0);
+
+  /* Set LCD Foreground Layer  */
+  LCD_SetLayer(LCD_FOREGROUND_LAYER);
+
+  /* Configure the transparency for foreground */
+  LCD_SetTransparency(200);
+
+  /* Clear the Foreground Layer */
+  LCD_Clear(LCD_COLOR_WHITE);
+
+  /* Set the LCD Back Color and Text Color*/
+  LCD_SetBackColor(LCD_COLOR_BLUE);
+  LCD_SetTextColor(LCD_COLOR_WHITE);
+
+    /* Set the LCD Text size */
+  LCD_SetFont(&FONTSIZE);
+
+  /* Set the LCD Back Color and Text Color*/
+  LCD_SetBackColor(LCD_COLOR_BLUE);
+  LCD_SetTextColor(LCD_COLOR_WHITE);
+
+  LCD_DisplayStringLine(LINE(LINENUM), (uint8_t*)MESSAGE1);
+  LCD_DisplayStringLine(LINE(LINENUM + 1), (uint8_t*)MESSAGE1_1);
+  LCD_DisplayStringLine(LINE(0x17), (uint8_t*)"                               ");
+
+  /* Set the LCD Text size */
+  LCD_SetFont(&Font16x24);
+
+  LCD_DisplayStringLine(LCD_LINE_0, (uint8_t*)MESSAGE2);
+  LCD_DisplayStringLine(LCD_LINE_1, (uint8_t*)MESSAGE2_1);
+
+
+
+  /* Set the LCD Back Color and Text Color*/
+  LCD_SetBackColor(LCD_COLOR_WHITE);
+  LCD_SetTextColor(LCD_COLOR_BLUE);
+}
+
+static void Display(int i)
+{
+  uint8_t  led3 = 0, led4 = 0;
+  uint8_t aTextBuffer[50];
+
+  led3 = GPIO_ReadOutputDataBit(LED3_GPIO_PORT,LED3_PIN);     //
+
+  sprintf((char*)aTextBuffer, MESSAGE5, led3);
+  LCD_DisplayStringLine(LCD_LINE_4, (uint8_t*)aTextBuffer);    //LED3
+
+  led4 = GPIO_ReadOutputDataBit(LED3_GPIO_PORT,LED4_PIN);
+  sprintf((char*)aTextBuffer, MESSAGE6, led4);
+  sprintf((char*)aTextBuffer, "porevo=%d", i);
+   LCD_DisplayStringLine(LCD_LINE_2, (uint8_t*)aTextBuffer);
+   LCD_DisplayStringLine(LCD_LINE_7, (uint8_t*)aTextBuffer);
+}
+
+int main(void)
+{
+  int i;
+i=0;
+	Display_Init();
+
+  while (1)
+  {
+	  i++;
+	  Delays();
+		GPIO_SetBits(LED4_GPIO_PORT,LED4_PIN);
+		GPIO_ResetBits(LED3_GPIO_PORT,LED3_PIN);
+		Display(i);
+		Delays();
+		GPIO_SetBits(LED3_GPIO_PORT,LED3_PIN);
+		GPIO_ResetBits(LED4_GPIO_PORT,LED4_PIN);
+		Display(i);
+  }
+}
