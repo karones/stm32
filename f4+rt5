@@ -1,3 +1,4 @@
+
 #include <stm32f4xx.h>
 #include <misc.h> // I recommend you have a look at these in the ST firmware folder
 #include <stm32f4xx_usart.h> // under Libraries/STM32F4xx_StdPeriph_Driver/inc and src
@@ -66,7 +67,7 @@ USART_Init(USART1, &USART_InitStruct); // again all the properties are passed to
 * if the USART1 receive interrupt occurs
 */
 USART_ITConfig(USART1, USART_IT_RXNE, ENABLE); // enable the USART1 receive interrupt
-NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn; // we want to configure the USART1 interrupts
+//NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn; // we want to configure the USART1 interrupts //функция вызывается ниже
 NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;// this sets the priority group of the USART1 interrupts
 NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0; // this sets the subpriority inside the group
 NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE; // the USART1 interrupts are globally enabled
@@ -87,7 +88,7 @@ USART_Cmd(USART1, ENABLE);
 * Note 2: At the moment it takes a volatile char because the received_string variable
 * declared as volatile char --> otherwise the compiler will spit out warnings
 * */
-}
+
 //функцию мы будем передавать три параметра — номер используемого модуля I2C, направление передачи данных и адрес подчиненного устройства.
 
 void USART_puts(USART_TypeDef* USARTx, int * s){
@@ -103,13 +104,14 @@ USART_SendData(USARTx, *s);
 int main(void) {
 init_USART1(9600); // initialize USART1 @ 9600 baud
  // just send a message to indicate that it works
-
+int i;
 while (1){
 
 for (i=2;i<8191;i++)
-USART_puts(i);
+USART_puts(USART1, i);
 Delay(100);
-USART_puts(i);
+USART_puts(USART1, i);
 
 }
 }
+
