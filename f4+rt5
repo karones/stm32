@@ -1,4 +1,4 @@
-
+//http://skyduino.wordpress.com/2011/12/29/tutoriel-arduino-et-emetteurrecepteur-433mhz-virtualwire/
 #include <stm32f4xx.h>
 #include <misc.h> // I recommend you have a look at these in the ST firmware folder
 #include <stm32f4xx_usart.h> // under Libraries/STM32F4xx_StdPeriph_Driver/inc and src
