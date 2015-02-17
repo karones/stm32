@@ -1,0 +1,236 @@
+#include <stm32f4xx.h>
+#include <misc.h> // I recommend you have a look at these in the ST firmware folder
+#include <stm32f4xx_usart.h> // under Libraries/STM32F4xx_StdPeriph_Driver/inc and src
+#include<stm32f4xx_gpio.h>
+ #define MAX_STRLEN 12 //
+#include <stm32f4xx_ltdc.h>
+#include "stm32f429i_discovery_lcd.h"
+#define MESSAGE1 "STM32F429I-Discoverry" //
+#define MESSAGE1_1 " GPIO TEST "
+#define MESSAGE2 " LED3 LED4 "
+#define MESSAGE2_1 " ^-^ "
+#define MESSAGE5 " LED3 = %d" //LED3
+#define MESSAGE6 " LED4 = %d" //LED4
+#define LINENUM 0x15 //
+#define FONTSIZE Font12x12 //
+volatile char received_string[MAX_STRLEN+1]; // this will hold the recieved string
+int bitread (void * bit, int i)
+{
+    return ((*(char*)bit>>i)&1);
+}
+
+void Delay(const uint16_t ms)
+{
+uint32_t i = ms * 28;
+while (i-- > 0) {
+asm("nop");
+}
+}
+
+char s[1024];
+
+static volatile uint32_t TimingDelay;
+void TimingDelay_Decrement(){};
+/* This funcion initializes the USART1 peripheral
+*
+* Arguments: baudrate --> the baudrate at which the USART is
+* supposed to operate
+*/
+void init_USART1(uint32_t baudrate){
+/* This is a concept that has to do with the libraries provided by ST
+* to make development easier the have made up something similar to
+* classes, called TypeDefs, which actually just define the common
+* parameters that every peripheral needs to work correctly
+*
+* They make our life easier because we don't have to mess around with
+* the low level stuff of setting bits in the correct registers
+*/
+GPIO_InitTypeDef GPIO_InitStruct; // this is for the GPIO pins used as TX and RX
+USART_InitTypeDef USART_InitStruct; // this is for the USART1 initilization
+NVIC_InitTypeDef NVIC_InitStructure; // this is used to configure the NVIC (nested vector interrupt controller)
+/* enable APB2 peripheral clock for USART1
+* note that only USART1 and USART6 are connected to APB2
+* the other USARTs are connected to APB1
+*/
+RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1, ENABLE);
+/* enable the peripheral clock for the pins used by
+* USART1, PB6 for TX and PB7 for RX
+*/
+RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);
+/* This sequence sets up the TX and RX pins
+* so they work correctly with the USART1 peripheral
+*/
+GPIO_InitStruct.GPIO_Pin = GPIO_Pin_6 | GPIO_Pin_7; // Pins 6 (TX) and 7 (RX) are used
+GPIO_InitStruct.GPIO_Mode = GPIO_Mode_AF; // the pins are configured as alternate function so the USART peripheral has access to them
+GPIO_InitStruct.GPIO_Speed = GPIO_Speed_50MHz; // this defines the IO speed and has nothing to do with the baudrate!
+GPIO_InitStruct.GPIO_OType = GPIO_OType_PP; // this defines the output type as push pull mode (as opposed to open drain)
+GPIO_InitStruct.GPIO_PuPd = GPIO_PuPd_UP; // this activates the pullup resistors on the IO pins
+GPIO_Init(GPIOB, &GPIO_InitStruct); // now all the values are passed to the GPIO_Init() function which sets the GPIO registers
+/* The RX and TX pins are now connected to their AF
+* so that the USART1 can take over control of the
+* pins
+*/
+GPIO_PinAFConfig(GPIOB, GPIO_PinSource6, GPIO_AF_USART1); //
+GPIO_PinAFConfig(GPIOB, GPIO_PinSource7, GPIO_AF_USART1);
+/* Now the USART_InitStruct is used to define the
+* properties of USART1
+*/
+USART_InitStruct.USART_BaudRate = baudrate; // the baudrate is set to the value we passed into this init function
+USART_InitStruct.USART_WordLength = USART_WordLength_8b;// we want the data frame size to be 8 bits (standard)
+USART_InitStruct.USART_StopBits = USART_StopBits_1; // we want 1 stop bit (standard)
+USART_InitStruct.USART_Parity = USART_Parity_No; // we don't want a parity bit (standard)
+USART_InitStruct.USART_HardwareFlowControl = USART_HardwareFlowControl_None; // we don't want flow control (standard)
+USART_InitStruct.USART_Mode = USART_Mode_Tx | USART_Mode_Rx; // we want to enable the transmitter and the receiver
+USART_Init(USART1, &USART_InitStruct); // again all the properties are passed to the USART_Init function which takes care of all the bit setting
+/* Here the USART1 receive interrupt is enabled
+* and the interrupt controller is configured
+* to jump to the USART1_IRQHandler() function
+* if the USART1 receive interrupt occurs
+*/
+USART_ITConfig(USART1, USART_IT_RXNE, ENABLE); // enable the USART1 receive interrupt
+NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn; // we want to configure the USART1 interrupts
+NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;// this sets the priority group of the USART1 interrupts
+NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0; // this sets the subpriority inside the group
+NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE; // the USART1 interrupts are globally enabled
+NVIC_Init(&NVIC_InitStructure); // the properties are passed to the NVIC_Init function which takes care of the low level stuff
+// finally this enables the complete USART1 peripheral
+USART_Cmd(USART1, ENABLE);
+}
+
+
+void USART_puts(USART_TypeDef* USARTx, char * s){
+while(*s){
+// wait until data register is empty
+while( !(USARTx->SR & 0x00000040) );
+USART_SendData(USARTx, *s);
+*s++;
+}
+}
+
+int tr(){
+
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOG, ENABLE);
+	GPIO_InitTypeDef tr443; // создаем структуру
+	tr443.GPIO_Mode = GPIO_Mode_OUT; // направление - выход
+	tr443.GPIO_OType = GPIO_OType_PP; // Двухтактный выход
+	tr443.GPIO_PuPd = GPIO_PuPd_NOPULL; // Без подтяжки
+	tr443.GPIO_Speed = GPIO_Speed_2MHz; // Скорость низкая
+	tr443.GPIO_Pin = GPIO_Pin_5; // выходной порт PG5
+	GPIO_Init(GPIOG, &tr443);
+
+return 0;
+}
+
+
+static void Display_Init(void)
+{
+/* Initialize the LCD */
+LCD_Init();
+LCD_LayerInit();
+/* Eable the LTDC */
+LTDC_Cmd(ENABLE);
+/* Set LCD Background Layer */
+LCD_SetLayer(LCD_BACKGROUND_LAYER);
+/* Clear the Background Layer */
+LCD_Clear(LCD_COLOR_WHITE);
+/* Configure the transparency for background */
+LCD_SetTransparency(0);
+/* Set LCD Foreground Layer */
+LCD_SetLayer(LCD_FOREGROUND_LAYER);
+/* Configure the transparency for foreground */
+LCD_SetTransparency(200);
+/* Clear the Foreground Layer */
+LCD_Clear(LCD_COLOR_WHITE);
+/* Set the LCD Back Color and Text Color*/
+LCD_SetBackColor(LCD_COLOR_BLUE);
+LCD_SetTextColor(LCD_COLOR_WHITE);
+/* Set the LCD Text size */
+LCD_SetFont(&FONTSIZE);
+/* Set the LCD Back Color and Text Color*/
+LCD_SetBackColor(LCD_COLOR_BLUE);
+LCD_SetTextColor(LCD_COLOR_WHITE);
+LCD_DisplayStringLine(LINE(LINENUM), (uint8_t*)MESSAGE1);
+LCD_DisplayStringLine(LINE(LINENUM + 1), (uint8_t*)MESSAGE1_1);
+LCD_DisplayStringLine(LINE(0x17), (uint8_t*)" ");
+/* Set the LCD Text size */
+LCD_SetFont(&Font16x24);
+
+/* Set the LCD Back Color and Text Color*/
+LCD_SetBackColor(LCD_COLOR_WHITE);
+LCD_SetTextColor(LCD_COLOR_BLUE);
+}
+static void Display(int i)
+{
+	uint8_t aTextBuffer[50];
+
+sprintf((char*)aTextBuffer, "code=%d", i);
+LCD_DisplayStringLine(LCD_LINE_2, (uint8_t*)aTextBuffer);
+
+}
+void send_startbit()
+{
+	GPIO_SetBits(GPIOG, GPIO_Pin_5);
+	Delay(320);
+	GPIO_ResetBits(GPIOG, GPIO_Pin_5);
+
+}
+
+void send_packet(int packet)
+{
+
+	int bit=-1;
+	int count=-1;
+	int bittr=-1;
+	for (count=0; count <4;count++){
+	send_startbit();
+
+	for (bit=0;bit<12;bit++){
+			bittr=bitread(&packet,bit);
+			if (bittr==0) {
+				GPIO_ResetBits(GPIOG, GPIO_Pin_5); // 0
+				Delay(320);
+				GPIO_SetBits(GPIOG, GPIO_Pin_5);
+				Delay(640);
+			}else{
+				GPIO_ResetBits(GPIOG, GPIO_Pin_5); // 1
+				Delay(640);
+				GPIO_SetBits(GPIOG, GPIO_Pin_5);
+				Delay(320);
+			}
+
+
+		}
+	GPIO_ResetBits(GPIOG, GPIO_Pin_5);
+	Delay(11520);
+}
+}
+
+void main(){
+tr();
+ init_USART1(9600); // initialize USART1 @ 9600 baud
+USART_puts(USART1, "Init complete! Hello World!\n"); // just send a message to indicate that it works
+Display_Init();
+// Включаем светодиод
+//GPIO_SetBits(GPIOG, GPIO_Pin_5);
+
+int data=0; //0000000000000011
+;
+int bittr;
+for (data=0; data<4097; data++)
+
+{
+	Display(data);
+	send_packet(data);
+}
+// Теперь выключаем светодиод
+//GPIO_ResetBits(GPIOG, GPIO_Pin_5);
+
+
+while (1){
+
+
+
+
+	}
+return;
+}
